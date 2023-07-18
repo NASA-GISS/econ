@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 if [[ $( dirname "${BASH_SOURCE[0]}" ) == "." ]]; then
-    SCRIPT_HOME=$(pwd); else SCRIPT_HOME=$( dirname "${BASH_SOURCE[0]}" ); 
+  SCRIPT_HOME=$(pwd); else SCRIPT_HOME=$( dirname "${BASH_SOURCE[0]}" );
 fi
+SCRIPT_HOME=$(readlink -f ${SCRIPT_HOME})
 
 export SCRIPT_HOME
 source "${SCRIPT_HOME}/econ_includes.sh"
@@ -117,12 +118,16 @@ function check_args() {
   then print_usage; err_exit "RUNID not set";
   else log_info "RUNID: ${runid}"; fi
 
-  NB=${NOBACKUP:=.}
+  NB=${NOBACKUP:=$(readlink -f .)} # set to CWD if not set
   # set defaults if not set
   log_info "E_ROOT: ${er:=${NB}}"
   
   log_info "Git commit: ${gc:=unstaged}"
+
+  # use --rc if set, otherwise $MODELERC, otherwise ~/.modelErc
+  [[ ${rc:-} ]] && MODELERC=${rc}
   MODELERC=${MODELERC:=~/.modelErc}
+  MODELERC=$(readlink -f ${MODELERC}) # full path
   log_info "RC file: ${rc:=${MODELERC}}"
   log_info "Num processors: ${np:=22}"
 
