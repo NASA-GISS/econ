@@ -252,9 +252,13 @@ function build_setup() {
     if [[ $(git status --porcelain=v1 |grep M 2>/dev/null | wc -l) != 0 ]]; then
       tmpfile=$(mktemp -p ${tmpdir} patch.XXX)
       git diff > ${tmpfile}
-      log_info "Applying unstaged changes from patch ${tmpfile}..."
-      (cd ${rundir}; git apply --whitespace=nowarn ${tmpfile})
-      rm ${tmpfile}
+      if [[ ! ( -s ${tmpfile}) ]]; then
+	log_info "Not unstaged patch... using HEAD"
+      else
+	log_info "Applying unstaged changes from patch ${tmpfile}..."
+	(cd ${rundir}; git apply --whitespace=nowarn ${tmpfile})
+	rm ${tmpfile}
+      fi
     fi
   else
     log_info "Checking out revision: ${gc}"
