@@ -66,10 +66,10 @@ echo
 #+begin_example
 Restart test: 5 days vs 2+3 days
 # run for 5 days from cold start
-../exec/econ.sh -r foo --template /path/to/E6F40nopism -t0 1000-01-01 -t2 1000-01-05 -cold-restart -v
+../exec/econ -r foo --template /path/to/E6F40nopism -t0 1000-01-01 -t2 1000-01-05 -cold-restart -v
 # run for 2 (cold start) + 3 days (continue)
-../exec/econ.sh -r bar --template /path/to/foo.R -t0 1000-01-01 -t2 1000-01-02 -cold-restart
-../exec/econ.sh -r bar -t1 1000-01-05
+../exec/econ -r bar --template /path/to/foo.R -t0 1000-01-01 -t2 1000-01-02 -cold-restart
+../exec/econ -r bar -t1 1000-01-05
 
 More complicated example...
 ../exec/econ.sh -r bar \
