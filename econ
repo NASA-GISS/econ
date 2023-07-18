@@ -176,7 +176,7 @@ function check_vars() {
   # overwrite(y) rundir(notexists) cold_restart(y): OK but overwrite illogical
   # overwrite(y) rundir(notexists) cold_restart(n): INVALID
   [[ (! -z ${overwrite:-} ) && (! -d ${rundir:-}) ]] && \
-    err_exit "Overwrite set but RUNDIR does not exist"
+    log_warn "Overwrite set but RUNDIR does not exist"
   
   # overwrite(y) rundir(exists) cold_restart(n):    INVALID
   [[ (! -z ${overwrite:-} ) && -d ${rundir:-} && -z ${cold_restart:-} ]] && \
