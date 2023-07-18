@@ -154,10 +154,6 @@ function set_vars() {
   E_dir=$(dirname $(pwd)) # one up from decks
   rundir=${er}/econ/${runid}
 
-  if [[ ${gc} == "unstaged" ]];
-  then git_branch="";
-  else git_branch="-b ${gc}"; fi
-
   tmpdir=${er}/econ/tmp && mkdir -p ${tmpdir}
   
 } # END: set_vars
@@ -247,9 +243,9 @@ function build_setup() {
   fi
     
   # TODO: If no cold-restart, don't clone but apply changes?
-  
-  log_info "Cloning ${git_branch:-HEAD (+ unstaged)} to ${rundir}"
-  git clone ${git_branch} ${E_dir} ${rundir}
+
+  log_info "Cloning to ${rundir}"
+  git clone ${E_dir} ${rundir}
 
   if [[ ${gc} == "unstaged" ]]; then
     # only patch if changes exist
@@ -260,6 +256,9 @@ function build_setup() {
       (cd ${rundir}; git apply --whitespace=nowarn ${tmpfile})
       rm ${tmpfile}
     fi
+  else
+    log_info "Checking out revision: ${gc}"
+    (cd ${rundir}; git checkout -q ${gc})
   fi
 
 } # END: build_setup
