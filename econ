@@ -149,12 +149,15 @@ function check_args() {
 # set non-user vars
 function set_vars() {
   log_info "Setting vars..."
-  
-  LIME_config_dir=${er}/data/landice/config
+
+  # Set internal non-user vars
+  LIME_config_dir=$(readlink -f ${er}/data/landice/config)
   E_dir=$(dirname $(pwd)) # one up from decks
   rundir=${er}/econ/${runid}
-
   tmpdir=${er}/econ/tmp && mkdir -p ${tmpdir}
+
+  # Full paths
+  [[ ${template} ]] && template=$(readlink -f ${template})
   
 } # END: set_vars
 
