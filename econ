@@ -1,0 +1,365 @@
+#!/usr/bin/env bash
+
+if [[ $( dirname "${BASH_SOURCE[0]}" ) == "." ]]; then
+    SCRIPT_HOME=$(pwd); else SCRIPT_HOME=$( dirname "${BASH_SOURCE[0]}" ); 
+fi
+
+export SCRIPT_HOME
+source "${SCRIPT_HOME}/econ_includes.sh"
+log_info "SCRIPT_HOME: ${SCRIPT_HOME}"
+
+
+function print_examples() {
+  print_cmd() { echo -en "${green}${*}${nc}"; }
+  print_comment() { echo -en "${orange}${*}${nc}"; }
+
+  print_comment "Restart test: 5 days vs 2+3 days"; echo ""
+  print_comment "# run for 5 days from cold start"; echo ""
+  print_cmd "../exec/econ.sh -r foo --template /path/to/E6F40nopism -t0 1000-01-01 -t2 1000-01-05 -cold-restart -v"; echo ""
+  print_comment "# run for 2 (cold start) + 3 days (continue)"; echo ""
+  print_cmd "../exec/econ.sh -r bar --template /path/to/foo.R -t0 1000-01-01 -t2 1000-01-02 -cold-restart"; echo ""
+  print_cmd "../exec/econ.sh -r bar -t1 1000-01-05"; echo ""
+
+  echo ""
+  print_comment "More complicated example..."; echo ""
+  print_cmd "../exec/econ.sh -r bar \\\\"; echo ""
+  print_cmd "  --template /path/to/template.R \\\\ "; print_comment "# custom .R file"; echo ""
+  print_cmd "  -t0 1000-01-01 \\\\          "; print_comment "# start in Y1000"; echo ""
+  print_cmd "  -t2 1000-02-01 \\\\          "; print_comment "# ISTART2 for 2 months"; echo ""
+  print_cmd "  -t1 1100-01-01 \\\\          "; print_comment "# total run for 100 years"; echo ""
+  print_cmd "  -gc HEAD^^^ \\\\             "; print_comment "# 3 commits ago"; echo ""
+  print_cmd "  -rc /path/to/modelE.rc \\\\ "; print_comment " # custom modelErc file"; echo ""
+  print_cmd "  -o \\\\                      "; print_comment "# overwrite run if exists"; echo ""
+  print_cmd "  -cr \\\\                     "; print_comment "# runE option: cold restart"; echo ""
+  print_cmd "  -np 22 \\\\                  "; print_comment "# runE option: num processors"; echo ""
+  print_cmd "  -t 30:00 \\\\                "; print_comment "# runE option: run time"; echo ""
+  print_cmd "  -q giss                   "; print_comment "# runE option: SLURM queue"; echo ""
+# EOF
+} # END: print_examples
+
+
+function print_usage() { cat <<EOF
+${PROGNAME} (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(-er|--e_root) E_ROOT] [(-gc|--git_commit) COMMIT] [-rc MODELERC] [-o|--overwrite] [-cr|--cold-restart] [-np|--num_processors N] [-t (m[m]|hh:mm)] [-q QUEUE] [-h|--help] [--examples] [--debug] [-v[v[v]]]
+
+  REQUIRED:
+  -r|--runid:      RUNID name
+
+  OPTIONAL:
+  --template:        TEMPLATE for RUNID. If not a path (no "/") searches modelE/templates folder
+  -er|--e_root:      Path to E_ROOT [default: \${NOBACKUP}]
+  -gc|--git_commit:  Git commit hash or tag or HEAD [default: HEAD + unstaged changes]
+  -t0:               Start date of run [default: 1000-01-01]
+  -t1:               Stop date of run [default: 1002-01-01]
+  -t2:               -cold-restart stop date of run [default: 1000-01-02]
+  -rc:               Path to MODELERC file. [default: \${MODELERC:~/.modelErc}]
+  -o|--overwrite:    Overwrite folder if it already exists
+  -h|--help:         Print this help
+  --examples:        Show some examples
+  -v[v[v]]:          Print debugging messages with increasing verobsity
+
+  OPTIONS for runE:
+  -cr|--cold-restart:    Passed to runE if set
+  -np|--num_processors:  Number of processors [default: 22]
+  -t:                    Queue time request [default: 10 if -cold-restart else 60:00]
+  -q:                    QSUB_STRING_<queue> from RC file. [default: ""]
+EOF
+}
+
+
+if [[ "$#" < 1 ]]; then
+  print_usage; exit 1 # err_exit "No arguments provided"
+fi
+
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case $key in
+    -h|--help) print_usage; exit 1;;
+    --examples) print_examples; exit 1;;
+    -r|--runid) runid="$2"; shift; shift;;
+    --template) template="$2"; shift; shift;;
+    -er|--e_root) er="$2"; shift; shift;;
+    -gc|--git_commit) gc="$2"; shift; shift;;
+    -rc) rc="$2"; shift; shift;;
+    -np|--num_processors) np="$2"; shift; shift;;
+    -t) t="$2"; shift; shift;;
+    -q) qsub_string="$2"; shift; shift;;
+    -t0) t0="$2"; shift; shift;;
+    -t1) t1="$2"; shift; shift;;
+    -t2) t2="$2"; shift; shift;;
+    ## options w/o arguments
+    -o|--overwrite) overwrite=1; shift;;
+    -cr|--cold-restart) cold_restart=" -cold-restart "; shift;;
+    --debug) debug=1; shift;;
+    --test) testme=1; shift;; # Compile functions and test
+    -v) verbose=1; shift;;
+    -vv) verbose=1; debug=1; shift;;
+    -vvv) verbose=1; debug=1; set -o xtrace; shift;;
+    # unknown option; save it in an array for later.
+    *) extra+=("$1"); shift;;
+  esac
+done
+
+if [[ ${extra:-} ]]; then log_warn "Unprocessed flags: ${extra[*]}"; fi
+
+
+# Check we're in the right environment
+function check_env() {
+  log_info "Checking env..."
+  [[ $(basename $(pwd)) == "decks" ]] || err_exit "Not in modelE/decks folder"
+  [[ $(hostname) == "discover"* ]] || log_warn "Not on discover"
+}
+
+
+# Check inputs, set up environment
+function check_args() {
+  log_info "Checking args..."
+  if [[ -z ${runid:-} ]];
+  then print_usage; err_exit "RUNID not set";
+  else log_info "RUNID: ${runid}"; fi
+
+  NB=${NOBACKUP:=.}
+  # set defaults if not set
+  log_info "E_ROOT: ${er:=${NB}}"
+  
+  log_info "Git commit: ${gc:=unstaged}"
+  MODELERC=${MODELERC:=~/.modelErc}
+  log_info "RC file: ${rc:=${MODELERC}}"
+  log_info "Num processors: ${np:=22}"
+
+  [[ ${qsub_string:-} ]] && log_info "QSUB_STRING_<q>: ${qsub_string}"
+
+  if [[ ${cold_restart:-} ]]; then
+    log_info "-cold-restart SET"
+    log_info "Start date: ${t0:=1000-01-01}"
+    log_info "Cold-restart stop date: ${t2:=1000-01-02}"
+    log_info "Time requested: ${t:="5:00"}"
+  else
+    log_info "-cold-restart NOT SET"
+    log_info "Stop date: ${t1:=1000-02-01}"
+    log_info "Time requested: ${t:=60:00}"
+  fi
+} # END: check_args
+
+
+# set non-user vars
+function set_vars() {
+  log_info "Setting vars..."
+  
+  LIME_config_dir=${er}/data/landice/config
+  E_dir=$(dirname $(pwd)) # one up from decks
+  rundir=${er}/econ/${runid}
+
+  if [[ ${gc} == "unstaged" ]];
+  then git_branch="";
+  else git_branch="-b ${gc}"; fi
+
+  tmpdir=${er}/econ/tmp && mkdir -p ${tmpdir}
+  
+} # END: set_vars
+
+
+function check_vars() {
+  log_info "Checking vars..."
+
+  if [[ ! -e ${rundir} ]]; then
+     if [[ -z ${template:-} ]]; then
+       err_exit "Need TEMPLATE if RUNDIR ${rundir} does not yet exist"
+     fi
+  fi
+
+  ## overwrite, rundir, cold-restart: Lots of combos that don't make sense.
+  # overwrite(y) rundir(notexists) cold_restart(y): OK but overwrite illogical
+  # overwrite(y) rundir(notexists) cold_restart(n): INVALID
+  [[ (! -z ${overwrite:-} ) && (! -d ${rundir:-}) ]] && \
+    err_exit "Overwrite set but RUNDIR does not exist"
+  
+  # overwrite(y) rundir(exists) cold_restart(n):    INVALID
+  [[ (! -z ${overwrite:-} ) && -d ${rundir:-} && -z ${cold_restart:-} ]] && \
+    err_exit "overwrite set but no -cold-restart"
+  
+  # overwrite(n) rundir(exists) cold_restart(y):    OK but 2nd cold restart?
+  [[ -z ${overwrite:-} && -d ${rundir:-} && (! -z ${cold_restart:-} ) ]] && \
+    err_exit "RUNDIR exists but -cold-restart... should set overwrite?"
+
+  # overwrite(n) rundir(exists) cold_restart(n):
+  if [[ -z ${overwrite:-} && -d ${rundir:-} && -z ${cold_restart:-} ]]; then
+    [[ ${t2:-} ]] && log_warn "t2 NOT USED"
+  fi
+
+  # overwrite(n) rundir(notexists) cold_restart(n): Should set cold_restart?
+  [[ -z ${overwrite:-} && -z ${rundir:-} && -z ${cold_restart:-} ]] && \
+    err_exit "New run but no -cold-restart"
+
+  # Last two cases
+  # overwrite(y) rundir(exists) cold_restart(y):    OK
+  # overwrite(n) rundir(notexists) cold_restart(y): OK
+
+  # check t0 t1 t2 formats
+  if [[ ${t0:-} ]]; then
+    [[ ${t0} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t0 format invalid: ${t0}"; fi
+
+  if [[ ${t1:-} ]]; then
+    [[ ${t1} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t1 format invalid: ${t1}"; fi
+  
+  if [[ ${t2:-} ]]; then
+    [[ ${t2} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t2 format invalid: ${t2}"; fi
+
+  if [[ ${t0:-} && ${t1:-} ]]; then
+    [[ $(date '+%s' -d $t0) < $(date '+%s' -d $t1) ]] && err_exit "t0 ${t0} > t1 ${t1}"; fi
+  if [[ ${t0:-} && ${t2:-} ]]; then
+    [[ $(date '+%s' -d $t0) < $(date '+%s' -d $t2) ]] && err_exit "t0 ${t0} > t2 ${t2}"; fi
+  if [[ ${t1:-} && ${t2:-} ]]; then
+    [[ $(date '+%s' -d $t1) > $(date '+%s' -d $t2) ]] && err_exit "t1 ${t1} < t2 ${t2}"; fi
+  echo ""
+} # END: check_vars
+
+
+function build_setup() {
+  log_info "Setting up build..."
+  
+  if [[ -d ${rundir} ]]; then
+    if [[ ${overwrite:-} ]]; then
+      log_warn "${rundir} exists. Overwriting..."
+
+      # erase rundir if it exists and overwrite set
+      source ${MODELERC}
+      [[ -z ${CMRUNDIR:-} ]] && err_exit "CMRUNDIR not defined"
+      [[ -z ${SAVEDISK:-} ]] && err_exit "SAVEDISK not defined"
+      log_warn "Removing RunID from CMRUNDIR: ${CMRUNDIR}"
+      (cd ${CMRUNDIR}; rm -fR ${runid})
+      log_warn "Removing RunID from SAVEDISK: ${SAVEDISK}"
+      (cd ${SAVEDISK}; rm -fR ${runid})
+      
+      rm -fR ${rundir}
+    else
+      log_warn "${rundir} exists and overwrite not set"
+    fi
+  fi
+
+  if [[ -z ${cold_restart:-} ]]; then
+    log_info "Continuing run (no -cold_restart) so NOT cloning source from ${E_dir}"
+    return 0
+  fi
+    
+  # TODO: If no cold-restart, don't clone but apply changes?
+  
+  log_info "Cloning ${git_branch:-HEAD (+ unstaged)} to ${rundir}"
+  git clone ${git_branch} ${E_dir} ${rundir}
+
+  if [[ ${gc} == "unstaged" ]]; then
+    # only patch if changes exist
+    if [[ $(git status --porcelain=v1 |grep M 2>/dev/null | wc -l) != 0 ]]; then
+      tmpfile=$(mktemp -p ${tmpdir} patch.XXX)
+      git diff > ${tmpfile}
+      log_info "Applying unstaged changes from patch ${tmpfile}..."
+      (cd ${rundir}; git apply --whitespace=nowarn ${tmpfile})
+      rm ${tmpfile}
+    fi
+  fi
+
+} # END: build_setup
+
+
+function build_do() {
+  log_info "Building..."
+  
+  cd ${rundir}/decks
+
+  if [[ ${template:-} ]]; then
+    log_info "Cloning ${template} to ${runid}.R"
+    if [[ "${template}" == *"/"* ]]; then
+      cp ${template} ${runid}.R
+    else
+      make rundeck RUN=${runid} RUNSRC=${template} OVERWRITE=YES
+    fi
+  else
+    log_info "No TEMPLATE... not regenerating rundeck"
+  fi
+
+  R_OR_I_FILE=${rundir}/decks/${runid}.R
+  [[ -e ${rundir}/decks/${runid}/I ]] && R_OR_I_FILE=${rundir}/decks/${runid}/I
+  
+  log_info "Setting dates..."
+
+  if [[ ${t0:-} ]]; then
+    log_info "  t0: ${t0}"
+    sed -i "s/YEARI[^,]*/YEARI=${t0:0:4}/" ${R_OR_I_FILE}
+    sed -i "s/MONTHI[^,]*/MONTHI=${t0:5:2}/" ${R_OR_I_FILE}
+    sed -i "s/DATEI[^,]*/DATEI=${t0:8:2}/" ${R_OR_I_FILE}
+  fi
+
+  if [[ ${t1:-} ]]; then
+    log_info "  t1: ${t1}"
+    sed -i "/ISTART=12/s/YEARE[^,]*/YEARE=${t1:0:4}/" ${R_OR_I_FILE}
+    sed -i "/ISTART=12/s/MONTHE[^,]*/MONTHE=${t1:5:2}/" ${R_OR_I_FILE}
+    sed -i "/ISTART=12/s/DATEE[^,]*/DATEE=${t1:8:2}/" ${R_OR_I_FILE}
+  fi
+  
+  if [[ ${t2:-} ]]; then
+    log_info "  t2: ${t2}"
+    sed -i "/ISTART=2/s/YEARE[^,]*/YEARE=${t2:0:4}/" ${R_OR_I_FILE}
+    sed -i "/ISTART=2/s/MONTHE[^,]*/MONTHE=${t2:5:2}/" ${R_OR_I_FILE}
+    sed -i "/ISTART=2/s/DATEE[^,]*/DATEE=${t2:8:2}/" ${R_OR_I_FILE}
+  fi
+
+  EXTRA_FFLAGS+=" -O0 -ggdb3 -fwrapv -fallow-argument-mismatch -fallow-invalid-boz"
+  EXTRA_FFLAGS+=" -DLI_COUPLE_DAILY"
+  EXTRA_LFLAGS+=" -O0 -ggdb3 "
+  
+  # compile
+  log_info "Compiling. Output in ${runid}.compile.{stdout,stderr}"
+  make -j setup \
+       RUN=${runid}  \
+       TEMPLATE=${template:-} \
+       MPI=${MPI:-YES} \
+       COMPILE_WITH_TRAPS=${COMPILE_WITH_TRAPS:-NO} \
+       EXTRA_FFLAGS="${EXTRA_FFLAGS:-}" \
+       EXTRA_LFLAGS="${EXTRA_LFLAGS:-}" \
+       >${runid}.compile.stdout 2>${runid}.compile.stderr
+  
+} # END: build_do
+
+
+function post_build() {
+  log_info "Post build..."
+
+  if [[ ! -d ${rundir}/decks/${runid}/config ]]; then
+    log_info "cp -R ${er}/data/landice/config ${rundir}/decks/${runid}/"
+    cp -R ${er}/data/landice/config ${rundir}/decks/${runid}/
+  fi
+} #END: post__build
+
+
+function runE() {
+  log_info "Running E..."
+  cd ${rundir}/decks
+
+  if [[ ${qsub_string:-} ]]; then qq=" -q ${qsub_string} "; else qq=""; fi
+  
+  ../exec/runE \
+    ${runid} \
+    ${cold_restart:-} \
+    -np ${np} \
+    -t ${t} \
+    ${qq} \
+    2>&1 | tee slurm.out
+
+} # END: runE
+
+
+trap ctrl_c INT # trap ctrl-c and call ctrl_c()
+function ctrl_c() {
+  log_warn "Caught CTRL-C. Running sswE. This make take a while..."
+  ../exec/sswE ${runid}
+  # kill -term $$ # send this program a terminate signal
+} # END: ctrl_c
+
+
+check_env
+check_args
+set_vars
+check_vars
+build_setup
+build_do
+post_build
+runE

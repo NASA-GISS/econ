@@ -1,0 +1,89 @@
+* Table of contents                               :toc_2:noexport:
+- [[#introduction][Introduction]]
+- [[#installation][Installation]]
+- [[#documentation][Documentation]]
+  - [[#help][Help]]
+  - [[#examples][Examples]]
+
+* Introduction
+
+A script for controlling modelE
+
+* Installation
+
+From the =modelE/exec= folder,
+
+#+BEGIN_SRC bash :exports both :results verbatim
+
+#+END_SRC
+
+
+* Documentation
+
+** Help
+#+BEGIN_SRC bash :exports both :results verbatim
+./econ --help
+echo
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+econ (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(-er|--e_root) E_ROOT] [(-gc|--git_commit) COMMIT] [-rc MODELERC] [-o|--overwrite] [-cr|--cold-restart] [-np|--num_processors N] [-t (m[m]|hh:mm)] [-q QUEUE] [-h|--help] [--examples] [--debug] [-v[v[v]]]
+
+  REQUIRED:
+  -r|--runid:      RUNID name
+
+  OPTIONAL:
+  --template:        TEMPLATE for RUNID. If not a path (no "/") searches modelE/templates folder
+  -er|--e_root:      Path to E_ROOT [default: ${NOBACKUP}]
+  -gc|--git_commit:  Git commit hash or tag or HEAD [default: HEAD + unstaged changes]
+  -t0:               Start date of run [default: 1000-01-01]
+  -t1:               Stop date of run [default: 1002-01-01]
+  -t2:               -cold-restart stop date of run [default: 1000-01-02]
+  -rc:               Path to MODELERC file. [default: ${MODELERC:~/.modelErc}]
+  -o|--overwrite:    Overwrite folder if it already exists
+  -h|--help:         Print this help
+  --examples:        Show some examples
+  -v[v[v]]:          Print debugging messages with increasing verobsity
+
+  OPTIONS for runE:
+  -cr|--cold-restart:    Passed to runE if set
+  -np|--num_processors:  Number of processors [default: 22]
+  -t:                    Queue time request [default: 10 if -cold-restart else 60:00]
+  -q:                    QSUB_STRING_<queue> from RC file. [default: ""]
+
+#+end_example
+
+** Examples
+
+#+BEGIN_SRC bash :exports both :results verbatim
+./econ --examples
+echo
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Restart test: 5 days vs 2+3 days
+# run for 5 days from cold start
+../exec/econ.sh -r foo --template /path/to/E6F40nopism -t0 1000-01-01 -t2 1000-01-05 -cold-restart -v
+# run for 2 (cold start) + 3 days (continue)
+../exec/econ.sh -r bar --template /path/to/foo.R -t0 1000-01-01 -t2 1000-01-02 -cold-restart
+../exec/econ.sh -r bar -t1 1000-01-05
+
+More complicated example...
+../exec/econ.sh -r bar \
+  --template /path/to/template.R \ # custom .R file
+  -t0 1000-01-01 \          # start in Y1000
+  -t2 1000-02-01 \          # ISTART2 for 2 months
+  -t1 1100-01-01 \          # total run for 100 years
+  -gc HEAD^^^ \             # 3 commits ago
+  -rc /path/to/modelE.rc \  # custom modelErc file
+  -o \                      # overwrite run if exists
+  -cr \                     # runE option: cold restart
+  -np 22 \                  # runE option: num processors
+  -t 30:00 \                # runE option: run time
+  -q giss                   # runE option: SLURM queue
+
+#+end_example
+
+
