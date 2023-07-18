@@ -270,7 +270,7 @@ function build_do() {
   cd ${rundir}/decks
 
   if [[ ${template:-} ]]; then
-    log_info "Cloning ${template} to ${runid}.R"
+    log_info "Copying ${template} to ${runid}.R"
     if [[ "${template}" == *"/"* ]]; then
       cp ${template} ${runid}.R
     else
