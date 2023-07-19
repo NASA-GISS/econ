@@ -139,22 +139,22 @@ function check_args() {
 
   # set template if not /path/to/file
   # template only needed if rundir does not exist
-  if [[ ! -e ${rundir} ]]; then
+  #if [[ (! -e ${rundir}) || ( -z ${overwrite:-} ) ]]; then
+  if [[ ${template:-} ]]; then
+    rfile=${template:-}
     if [[ ! ( "${template}" == *"/"* ) ]]; then # no path, search...
-      template=$(dirname $rundir)/$template/decks/${template}
-      [[ -e ${template}.R ]] || \
-	template=${rundir}/decks/${template}
-      [[ -e ${template}.R ]] || \
-	template=${er}/prod_decks/${template}
-      [[ -e ${template}.R ]] || \
-	template=${WORKDIR}/prod_decks/${template}
-      [[ -e ${template}.R ]] || \
+      rfile=$(dirname $rundir)/$template/decks/${template}
+      [[ -f ${rfile}.R ]] || rfile=${rundir}/decks/${template}
+      [[ -f ${rfile}.R ]] || rfile=${er}/prod_decks/${template}
+      [[ -f ${rfile}.R ]] || rfile=${WORKDIR}/prod_decks/${template}
+      [[ -f ${rfile}.R ]] || rfile=${WORKDIR}/templates/${template}
+      [[ -f ${rfile}.R ]] || rfile=/discover/nobackup/kmankoff/data/landice/${template}
+      [[ -f ${rfile}.R ]] || \
 	err_exit "Cannot find TEMPLATE ${template}"
     fi
-  else
-    template=$(readlink -f ${template})
-  fi
-  log_info "TEMPLATE: ${template}.R"
+    template=$(readlink -f ${rfile}.R)
+    log_info "TEMPLATE: ${template}"
+  else log_info "No TEMPLATE"; fi
   
   log_info "Git commit: ${gc:=unstaged}"
   
@@ -175,8 +175,8 @@ function check_args() {
   
   log_info "Num processors: ${np:=22}"
 
-
-  [[ ${t:-} ]] && log_info "Requested queue runtime: ${t}"
+  [[ ${cold-restart:-} ]] && log_info "Requested queue runtime: ${t:=10:00}"
+  [[ -z ${cold-restart:-} ]] && log_info "Requested queue runtime: ${t:=60:00}"
   [[ ${qsub_string:-} ]] && log_info "QSUB_STRING_<q>: ${qsub_string}"
   
     
@@ -190,16 +190,16 @@ function check_args() {
   # | N         | Y      | N            | OK      |                                         |
   # | N         | N      | Y            | OK      |                                         |
   # | N         | N      | N            | INVALID | New run but no COLD_RESTART             |
-  [[ (! -z ${overwrite:-} ) && (! -d ${rundir:-}) ]] && \
+
+  [[ -n ${overwrite:-} && (! -d ${rundir:-}) ]] && \
     log_warn "Overwrite set but RUNDIR does not exist"
-  [[ (! -z ${overwrite:-} ) && -d ${rundir:-} && -z ${cold_restart:-} ]] && \
+  [[ -n ${overwrite:-} && -d ${rundir:-} && -z ${cold_restart:-} ]] && \
     err_exit "overwrite set but no -cold-restart"
-  [[ -z ${overwrite:-} && -d ${rundir:-} && (! -z ${cold_restart:-} ) ]] && \
+  [[ -z ${overwrite:-} && -d ${rundir:-} && -n ${cold_restart:-} ]] && \
     err_exit "RUNDIR exists but -cold-restart... should set overwrite?"
   [[ -z ${overwrite:-} && -z ${rundir:-} && -z ${cold_restart:-} ]] && \
     err_exit "New run but no -cold-restart"
 
-  
   # Default for t0, t1, and t2
   [[ ${cold_restart:-} ]] && \
     log_info "CR set; t0=${t0:=1000-01-01}; t2=${t2:=1000-01-02}"
@@ -246,7 +246,7 @@ function build_setup() {
       tmpfile=$(mktemp -p ${tmpdir} patch.XXX)
       git diff > ${tmpfile}
       if [[ ! ( -s ${tmpfile}) ]]; then
-	log_info "Not unstaged patch... using HEAD"
+	log_info "No unstaged patch (clean)... using HEAD"
       else
 	log_info "Applying unstaged changes from patch ${tmpfile}..."
 	(cd ${rundir}; git apply --whitespace=nowarn ${tmpfile})
@@ -268,13 +268,13 @@ function build_do() {
 
   if [[ ${template:-} ]]; then
     log_info "Copying ${template} to ${runid}.R"
-    cp ${template}.R ${runid}.R
+    cp ${template} ${runid}.R
   else
     log_info "No TEMPLATE... not regenerating rundeck"
   fi
 
   R_OR_I_FILE=${rundir}/decks/${runid}.R
-  [[ -e ${rundir}/decks/${runid}/I ]] && R_OR_I_FILE=${rundir}/decks/${runid}/I
+  [[ -f ${rundir}/decks/${runid}/I ]] && R_OR_I_FILE=${rundir}/decks/${runid}/I
   
   log_info "Setting dates..."
 
@@ -305,6 +305,7 @@ function build_do() {
   
   # compile
   log_info "Compiling. Output in ${runid}.compile.{stdout,stderr}"
+  
   make -j setup \
        RUN=${runid}  \
        TEMPLATE=${template:-} \
@@ -332,7 +333,7 @@ function runE() {
   cd ${rundir}/decks
 
   if [[ ${qsub_string:-} ]]; then qq=" -q ${qsub_string} "; else qq=""; fi
-  
+
   ../exec/runE \
     ${runid} \
     ${cold_restart:-} \
