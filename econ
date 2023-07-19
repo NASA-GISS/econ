@@ -5,6 +5,8 @@ if [[ $( dirname "${BASH_SOURCE[0]}" ) == "." ]]; then
 fi
 SCRIPT_HOME=$(readlink -f ${SCRIPT_HOME})
 
+WORKDIR=$(dirname $(pwd)) # one up from decks
+  
 export SCRIPT_HOME
 source "${SCRIPT_HOME}/econ_includes.sh"
 log_info "SCRIPT_HOME: ${SCRIPT_HOME}"
@@ -46,7 +48,7 @@ ${PROGNAME} (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(
   -r|--runid:      RUNID name
 
   OPTIONAL:
-  --template:        TEMPLATE for RUNID. If not a path (no "/") searches modelE/templates folder
+  --template:        TEMPLATE for RUNID. If not a path (no "/") searches E_ROOT then modelE/templates folder
   -er|--e_root:      Path to E_ROOT [default: \${NOBACKUP}]
   -gc|--git_commit:  Git commit hash or tag or HEAD [default: HEAD + unstaged changes]
   -t0:               Start date of run [default: 1000-01-01]
@@ -66,11 +68,13 @@ ${PROGNAME} (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(
 EOF
 }
 
-
 if [[ "$#" < 1 ]]; then
   print_usage; exit 1 # err_exit "No arguments provided"
 fi
 
+call="$@" # to print out later
+
+# import CLI flags and options
 while [[ $# -gt 0 ]]; do
   key="$1"
   case $key in
@@ -100,8 +104,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ${extra:-} ]]; then log_warn "Unprocessed flags: ${extra[*]}"; fi
+log_warn "Call: $(readlink -f $0) ${call}" # command line call  
 
+if [[ ${extra:-} ]]; then log_warn "Unprocessed flags: ${extra[*]}"; fi
 
 # Check we're in the right environment
 function check_env() {
@@ -114,108 +119,93 @@ function check_env() {
 # Check inputs, set up environment
 function check_args() {
   log_info "Checking args..."
-  if [[ -z ${runid:-} ]];
+
+  ## Should keep this and CASE statement above in order
+
+  # RUNID must exist
+  if [[ -z ${runid:-} ]];   # this needs to be set by user
   then print_usage; err_exit "RUNID not set";
   else log_info "RUNID: ${runid}"; fi
 
-  NB=${NOBACKUP:=$(readlink -f .)} # set to CWD if not set
-  # set defaults if not set
+  # E_ROOT defines where ModelE_Support is and econ resides.
+  # Defaults to NOBACKUP on discover, . on other hosts
+  NB=${NOBACKUP:=$(readlink -f .)}
   log_info "E_ROOT: ${er:=${NB}}"
+
+  # make some helper variables
+  LIME_config_dir=${er}/data/landice/config
+  rundir=${er}/econ/${runid}
+  tmpdir=${er}/econ/tmp && mkdir -p ${tmpdir}
+
+  # set template if not /path/to/file
+  # template only needed if rundir does not exist
+  if [[ ! -e ${rundir} ]]; then
+    if [[ ! ( "${template}" == *"/"* ) ]]; then # no path, search...
+      template=$(dirname $rundir)/$template/decks/${template}
+      [[ -e ${template}.R ]] || \
+	template=${rundir}/decks/${template}
+      [[ -e ${template}.R ]] || \
+	template=${er}/prod_decks/${template}
+      [[ -e ${template}.R ]] || \
+	template=${WORKDIR}/prod_decks/${template}
+      [[ -e ${template}.R ]] || \
+	err_exit "Cannot find TEMPLATE ${template}"
+    fi
+  else
+    template=$(readlink -f ${template})
+  fi
+  log_info "TEMPLATE: ${template}.R"
   
   log_info "Git commit: ${gc:=unstaged}"
+  
+  # check t0 t1 t2 formats
+  # defined?    Valid?
+  [[ ${t0:-} && ${t0} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t0 format invalid: ${t0}"
+  [[ ${t1:-} && ${t1} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t1 format invalid: ${t1}"
+  [[ ${t2:-} && ${t2} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t2 format invalid: ${t2}"
+  [[ ${t0:-} && ${t1:-} && $(date '+%s' -d $t0) < $(date '+%s' -d $t1) ]] && err_exit "t0 ${t0} > t1 ${t1}"
+  [[ ${t0:-} && ${t2:-} && $(date '+%s' -d $t0) < $(date '+%s' -d $t2) ]] && err_exit "t0 ${t0} > t2 ${t2}"
+  [[ ${t1:-} && ${t2:-} && $(date '+%s' -d $t1) > $(date '+%s' -d $t2) ]] && err_exit "t1 ${t1} < t2 ${t2}"
 
-  # use --rc if set, otherwise $MODELERC, otherwise ~/.modelErc
+  # use RC if set, otherwise $MODELERC, otherwise ~/.modelErc
   [[ ${rc:-} ]] && MODELERC=${rc}
   MODELERC=${MODELERC:=~/.modelErc}
   MODELERC=$(readlink -f ${MODELERC}) # full path
   log_info "RC file: ${rc:=${MODELERC}}"
+  
   log_info "Num processors: ${np:=22}"
 
+
+  [[ ${t:-} ]] && log_info "Requested queue runtime: ${t}"
   [[ ${qsub_string:-} ]] && log_info "QSUB_STRING_<q>: ${qsub_string}"
-
-  if [[ ${cold_restart:-} ]]; then
-    log_info "-cold-restart SET"
-    log_info "Start date: ${t0:=1000-01-01}"
-    log_info "Cold-restart stop date: ${t2:=1000-01-02}"
-    log_info "Time requested: ${t:="5:00"}"
-  else
-    log_info "-cold-restart NOT SET"
-    log_info "Stop date: ${t1:=1000-02-01}"
-    log_info "Time requested: ${t:=60:00}"
-  fi
-} # END: check_args
-
-
-# set non-user vars
-function set_vars() {
-  log_info "Setting vars..."
-
-  # Set internal non-user vars
-  LIME_config_dir=$(readlink -f ${er}/data/landice/config)
-  E_dir=$(dirname $(pwd)) # one up from decks
-  rundir=${er}/econ/${runid}
-  tmpdir=${er}/econ/tmp && mkdir -p ${tmpdir}
-
-  # Full paths
-  [[ ${template} ]] && template=$(readlink -f ${template})
   
-} # END: set_vars
-
-
-function check_vars() {
-  log_info "Checking vars..."
-
-  if [[ ! -e ${rundir} ]]; then
-     if [[ -z ${template:-} ]]; then
-       err_exit "Need TEMPLATE if RUNDIR ${rundir} does not yet exist"
-     fi
-  fi
-
-  ## overwrite, rundir, cold-restart: Lots of combos that don't make sense.
-  # overwrite(y) rundir(notexists) cold_restart(y): OK but overwrite illogical
-  # overwrite(y) rundir(notexists) cold_restart(n): INVALID
+    
+  # | overwrite | rundir | cold-restart | type    | comment                                 |
+  # |-----------+--------+--------------+---------+-----------------------------------------|
+  # | Y         | Y      | Y            | OK      | OK                                      |
+  # | Y         | Y      | N            | INVALID | OVERWRITE set but no COLD_RESTART       |
+  # | Y         | N      | Y            | WARN    | OVERWRITE set but RUNDIR does not exist |
+  # | Y         | N      | N            | INVALID | OVERWRITE set but RUNDIR does not exist |
+  # | N         | Y      | Y            | INVALID | RUNDIR, no OVERWRITE, yes COLD_RESTART  |
+  # | N         | Y      | N            | OK      |                                         |
+  # | N         | N      | Y            | OK      |                                         |
+  # | N         | N      | N            | INVALID | New run but no COLD_RESTART             |
   [[ (! -z ${overwrite:-} ) && (! -d ${rundir:-}) ]] && \
     log_warn "Overwrite set but RUNDIR does not exist"
-  
-  # overwrite(y) rundir(exists) cold_restart(n):    INVALID
   [[ (! -z ${overwrite:-} ) && -d ${rundir:-} && -z ${cold_restart:-} ]] && \
     err_exit "overwrite set but no -cold-restart"
-  
-  # overwrite(n) rundir(exists) cold_restart(y):    OK but 2nd cold restart?
   [[ -z ${overwrite:-} && -d ${rundir:-} && (! -z ${cold_restart:-} ) ]] && \
     err_exit "RUNDIR exists but -cold-restart... should set overwrite?"
-
-  # overwrite(n) rundir(exists) cold_restart(n):
-  if [[ -z ${overwrite:-} && -d ${rundir:-} && -z ${cold_restart:-} ]]; then
-    [[ ${t2:-} ]] && log_warn "t2 NOT USED"
-  fi
-
-  # overwrite(n) rundir(notexists) cold_restart(n): Should set cold_restart?
   [[ -z ${overwrite:-} && -z ${rundir:-} && -z ${cold_restart:-} ]] && \
     err_exit "New run but no -cold-restart"
 
-  # Last two cases
-  # overwrite(y) rundir(exists) cold_restart(y):    OK
-  # overwrite(n) rundir(notexists) cold_restart(y): OK
-
-  # check t0 t1 t2 formats
-  if [[ ${t0:-} ]]; then
-    [[ ${t0} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t0 format invalid: ${t0}"; fi
-
-  if [[ ${t1:-} ]]; then
-    [[ ${t1} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t1 format invalid: ${t1}"; fi
   
-  if [[ ${t2:-} ]]; then
-    [[ ${t2} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t2 format invalid: ${t2}"; fi
-
-  if [[ ${t0:-} && ${t1:-} ]]; then
-    [[ $(date '+%s' -d $t0) < $(date '+%s' -d $t1) ]] && err_exit "t0 ${t0} > t1 ${t1}"; fi
-  if [[ ${t0:-} && ${t2:-} ]]; then
-    [[ $(date '+%s' -d $t0) < $(date '+%s' -d $t2) ]] && err_exit "t0 ${t0} > t2 ${t2}"; fi
-  if [[ ${t1:-} && ${t2:-} ]]; then
-    [[ $(date '+%s' -d $t1) > $(date '+%s' -d $t2) ]] && err_exit "t1 ${t1} < t2 ${t2}"; fi
-  echo ""
-} # END: check_vars
+  # Default for t0, t1, and t2
+  [[ ${cold_restart:-} ]] && \
+    log_info "CR set; t0=${t0:=1000-01-01}; t2=${t2:=1000-01-02}"
+  [[ -n ${cold_restart:-} ]] && \
+    log_info "CR set; t0=${t0:=1000-01-01}; t1=${t1:=1000-01-02}"
+} # END: check_args
 
 
 function build_setup() {
@@ -241,14 +231,14 @@ function build_setup() {
   fi
 
   if [[ -z ${cold_restart:-} ]]; then
-    log_info "Continuing run (no -cold_restart) so NOT cloning source from ${E_dir}"
+    log_info "Continuing run (no -cold_restart) so NOT cloning source from ${WORKDIR}"
     return 0
   fi
     
   # TODO: If no cold-restart, don't clone but apply changes?
 
   log_info "Cloning to ${rundir}"
-  git clone ${E_dir} ${rundir}
+  git clone ${WORKDIR} ${rundir}
 
   if [[ ${gc} == "unstaged" ]]; then
     # only patch if changes exist
@@ -278,11 +268,7 @@ function build_do() {
 
   if [[ ${template:-} ]]; then
     log_info "Copying ${template} to ${runid}.R"
-    if [[ "${template}" == *"/"* ]]; then
-      cp ${template} ${runid}.R
-    else
-      make rundeck RUN=${runid} RUNSRC=${template} OVERWRITE=YES
-    fi
+    cp ${template}.R ${runid}.R
   else
     log_info "No TEMPLATE... not regenerating rundeck"
   fi
@@ -368,8 +354,6 @@ function ctrl_c() {
 
 check_env
 check_args
-set_vars
-check_vars
 build_setup
 build_do
 post_build
