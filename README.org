@@ -22,13 +22,13 @@ unzip -j -o econ.zip econ-main/econ econ-main/econ_includes.sh
 * Documentation
 
 ** Help
-#+BEGIN_SRC bash :exports both :results verbatim :wrap "src bash :exports both"
+#+BEGIN_SRC bash :exports both :results verbatim
 ./econ --help
 echo
 #+END_SRC
 
 #+RESULTS:
-#+begin_src bash :exports both
+#+begin_example
 econ (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(-er|--e_root) E_ROOT] [(-gc|--git_commit) COMMIT] [-rc MODELERC] [-o|--overwrite] [-cr|--cold-restart] [-np|--num_processors N] [-t (m[m]|hh:mm)] [-q QUEUE] [-h|--help] [--examples] [--debug] [-v[v[v]]]
 
   REQUIRED:
@@ -53,7 +53,7 @@ econ (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(-er|--e
   -t:                    Queue time request [default: 10 if -cold-restart else 60:00]
   -q:                    QSUB_STRING_<queue> from RC file. [default: ""]
 
-#+end_src
+#+end_example
 
 
 ** Examples
