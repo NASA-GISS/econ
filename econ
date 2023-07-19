@@ -54,7 +54,7 @@ ${PROGNAME} (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(
   -t0:               Start date of run [default: 1000-01-01]
   -t1:               Stop date of run [default: 1002-01-01]
   -t2:               -cold-restart stop date of run [default: 1000-01-02]
-  -rc:               Path to MODELERC file. [default: \${MODELERC:~/.modelErc}]
+  -rc:               Path to MODELERC file. [default: \${MODELERC:=~/.modelErc}]
   -o|--overwrite:    Overwrite folder if it already exists
   -h|--help:         Print this help
   --examples:        Show some examples
