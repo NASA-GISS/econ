@@ -138,6 +138,8 @@ function set_defaults() {
   log_info "Num processors: ${np:=22}"
 
   [[ ${qsub_string:-} ]] && log_info "QSUB_STRING_<q>: ${qsub_string}"
+
+  return 0
 } # END: set_defaults
 
 
