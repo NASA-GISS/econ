@@ -29,7 +29,7 @@ echo
 
 #+RESULTS:
 #+begin_example
-econ (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(-er|--e_root) E_ROOT] [(-gc|--git_commit) COMMIT] [-rc MODELERC] [-o|--overwrite] [-cr|--cold-restart] [-np|--num_processors N] [-t (m[m]|hh:mm)] [-q QUEUE] [-h|--help] [--examples] [--debug] [-v[v[v]]]
+econ (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(-er|--e_root) E_ROOT] [(-gc|--git_commit) COMMIT] [-rc MODELERC] [-o|--overwrite] [-cr|--cold-restart] [--recompile] [-np|--num_processors N] [-t (m[m]|hh:mm)] [-q QUEUE] [-h|--help] [--examples] [--debug] [-v[v[v]]]
 
   REQUIRED:
   -r|--runid:      RUNID name
@@ -43,15 +43,18 @@ econ (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(-er|--e
   -t2:               -cold-restart stop date of run [default: 1000-01-02]
   -rc:               Path to MODELERC file. [default: ${MODELERC:=~/.modelErc}]
   -o|--overwrite:    Overwrite folder if it already exists
-  -h|--help:         Print this help
-  --examples:        Show some examples
-  -v[v[v]]:          Print debugging messages with increasing verbosity
+  --recompile:       Recompile code when restarting
 
   OPTIONS for runE:
   -cr|--cold-restart:    Passed to runE if set
   -np|--num_processors:  Number of processors [default: 22]
-  -t:                    Queue time request [default: 10 if -cold-restart else 60:00]
+  -t:                    Queue time request [default: 10 if --cold-restart else 60:00]
   -q:                    QSUB_STRING_<queue> from RC file. [default: ""]
+
+  HELP:
+  -h|--help:         Print this help
+  --examples:        Show some examples
+  -v[v[v]]:          Print debugging messages with increasing verobsity
 
 #+end_example
 

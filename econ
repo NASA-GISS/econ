@@ -18,9 +18,9 @@ function print_examples() {
 
   print_comment "Restart test: 5 days vs 2+3 days"; echo ""
   print_comment "# run for 5 days from cold start"; echo ""
-  print_cmd "../exec/econ -r foo --template /path/to/E6F40nopism -t0 1000-01-01 -t2 1000-01-05 -cold-restart -v"; echo ""
+  print_cmd "../exec/econ -r foo --template /path/to/E6F40nopism -t0 1000-01-01 -t2 1000-01-05 --cold-restart -v"; echo ""
   print_comment "# run for 2 (cold start) + 3 days (continue)"; echo ""
-  print_cmd "../exec/econ -r bar --template /path/to/foo.R -t0 1000-01-01 -t2 1000-01-02 -cold-restart"; echo ""
+  print_cmd "../exec/econ -r bar --template /path/to/foo.R -t0 1000-01-01 -t2 1000-01-02 --cold-restart"; echo ""
   print_cmd "../exec/econ -r bar -t1 1000-01-05"; echo ""
 
   echo ""
@@ -212,14 +212,21 @@ function check_args() {
   [[ -n ${overwrite:-} && (! -d ${rundir:-}) ]] && \
     log_warn "Overwrite set but RUNDIR does not exist"
   [[ -n ${overwrite:-} && -d ${rundir:-} && -z ${cold_restart:-} ]] && \
-    err_exit "overwrite set but no -cold-restart"
+    err_exit "overwrite set but no --cold-restart"
   [[ -z ${overwrite:-} && -d ${rundir:-} && -n ${cold_restart:-} ]] && \
-    err_exit "RUNDIR exists but -cold-restart... should set overwrite?"
+    log_warn "RUNDIR exists but --cold-restart w/o --overwrite?"
   [[ -z ${overwrite:-} && -z ${rundir:-} && -z ${cold_restart:-} ]] && \
-    err_exit "New run but no -cold-restart"
+<<<<<<< Updated upstream
+    err_exit "New run but no --cold-restart"
      
-  log_info "END of check_args" 
-
+  # Default for t0, t1, and t2
+  if [[ ${cold_restart:-} ]]; then
+    log_info "CR set: t0=${t0} t2=${t2}"
+    log_info "Requested queue runtime: ${t:=10:00}"
+  else
+    log_info "CR not set: t0=${t0} t1=${t1}"
+    log_info "Requested queue runtime: ${t:=60:00}"
+  fi
 } # END: check_args
 
 
