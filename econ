@@ -108,29 +108,47 @@ log_warn "Call: $(readlink -f $0) ${call}" # command line call
 
 if [[ ${extra:-} ]]; then log_warn "Unprocessed flags: ${extra[*]}"; fi
 
+
 # Check we're in the right environment
 function check_env() {
   log_info "Checking env..."
   [[ $(basename $(pwd)) == "decks" ]] || err_exit "Not in modelE/decks folder"
   [[ $(hostname) == "discover"* ]] || log_warn "Not on discover"
-}
+} # END: check_env
+
+
+function set_defaults() {
+  t0=${t0:=1000-01-01}
+  t1=${t1:=1002-01-01}
+  t2=${t2:=1000-01-02}
+
+  # E_ROOT defines where ModelE_Support is and econ resides.
+  # Defaults to NOBACKUP on discover, . on other hosts
+  NB=${NOBACKUP:=$(readlink -f .)}
+  log_info "E_ROOT: ${er:=${NB}}"
+  
+  log_info "Git commit: ${gc:=unstaged}"
+  
+  # use RC if set, otherwise $MODELERC, otherwise ~/.modelErc
+  [[ ${rc:-} ]] && MODELERC=${rc}
+  MODELERC=${MODELERC:=~/.modelErc}
+  MODELERC=$(readlink -f ${MODELERC}) # full path
+  log_info "RC file: ${rc:=${MODELERC}}"
+  
+  log_info "Num processors: ${np:=22}"
+
+  [[ ${qsub_string:-} ]] && log_info "QSUB_STRING_<q>: ${qsub_string}"
+} # END: set_defaults
 
 
 # Check inputs, set up environment
 function check_args() {
   log_info "Checking args..."
 
-  ## Should keep this and CASE statement above in order
-
   # RUNID must exist
   if [[ -z ${runid:-} ]];   # this needs to be set by user
   then print_usage; err_exit "RUNID not set";
   else log_info "RUNID: ${runid}"; fi
-
-  # E_ROOT defines where ModelE_Support is and econ resides.
-  # Defaults to NOBACKUP on discover, . on other hosts
-  NB=${NOBACKUP:=$(readlink -f .)}
-  log_info "E_ROOT: ${er:=${NB}}"
 
   # make some helper variables
   LIME_config_dir=${er}/data/landice/config
@@ -156,16 +174,12 @@ function check_args() {
     log_info "TEMPLATE: ${template}"
   else log_info "No TEMPLATE"; fi
   
-  log_info "Git commit: ${gc:=unstaged}"
-  
   # Default for t0, t1, and t2
   if [[ ${cold_restart:-} ]]; then
     log_info "CR set: t0=${t0:=1000-01-01} t2=${t2:=1000-01-02}"
-    t1=${t1:=${t2}}
     log_info "Requested queue runtime: ${t:=10:00}"
   else
     log_info "CR not set: t0=${t0:=1000-01-01} t1=${t1:=1000-01-02}"
-    t2=${t2:=${t1}}
     log_info "Requested queue runtime: ${t:=60:00}"
   fi
   
@@ -178,16 +192,6 @@ function check_args() {
   [[ ${t0:-} && ${t2:-} && $(date '+%s' -d $t0) < $(date '+%s' -d $t2) ]] && err_exit "t0 ${t0} > t2 ${t2}"
   [[ ${t1:-} && ${t2:-} && $(date '+%s' -d $t1) > $(date '+%s' -d $t2) ]] && err_exit "t1 ${t1} < t2 ${t2}"
 
-  # use RC if set, otherwise $MODELERC, otherwise ~/.modelErc
-  [[ ${rc:-} ]] && MODELERC=${rc}
-  MODELERC=${MODELERC:=~/.modelErc}
-  MODELERC=$(readlink -f ${MODELERC}) # full path
-  log_info "RC file: ${rc:=${MODELERC}}"
-  
-  log_info "Num processors: ${np:=22}"
-
-  [[ ${qsub_string:-} ]] && log_info "QSUB_STRING_<q>: ${qsub_string}"
-  
   # | overwrite | rundir | cold-restart | type    | comment                                 |
   # |-----------+--------+--------------+---------+-----------------------------------------|
   # | Y         | Y      | Y            | OK      | OK                                      |
@@ -357,6 +361,7 @@ function ctrl_c() {
 
 
 check_env
+set_defaults
 check_args
 build_setup
 build_do
