@@ -158,6 +158,17 @@ function check_args() {
   
   log_info "Git commit: ${gc:=unstaged}"
   
+  # Default for t0, t1, and t2
+  if [[ ${cold_restart:-} ]]; then
+    log_info "CR set: t0=${t0:=1000-01-01} t2=${t2:=1000-01-02}"
+    t1=${t1:=${t2}}
+    log_info "Requested queue runtime: ${t:=10:00}"
+  else
+    log_info "CR not set: t0=${t0:=1000-01-01} t1=${t1:=1000-01-02}"
+    t2=${t2:=${t1}}
+    log_info "Requested queue runtime: ${t:=60:00}"
+  fi
+  
   # check t0 t1 t2 formats and bounds
   # defined?    Valid?
   [[ ${t0:-} && ${t0} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t0 format invalid: ${t0}"
@@ -196,15 +207,8 @@ function check_args() {
     err_exit "RUNDIR exists but -cold-restart... should set overwrite?"
   [[ -z ${overwrite:-} && -z ${rundir:-} && -z ${cold_restart:-} ]] && \
     err_exit "New run but no -cold-restart"
-      
-  # Default for t0, t1, and t2
-  if [[ ${cold_restart:-} ]]; then
-    log_info "CR set: t0=${t0:=1000-01-01} t2=${t2:=1000-01-02}"
-    log_info "Requested queue runtime: ${t:=10:00}"
-  else
-    log_info "CR not set: t0=${t0:=1000-01-01} t1=${t1:=1000-01-02}"
-    log_info "Requested queue runtime: ${t:=60:00}"
-  fi
+     
+  log_info "END of check_args" 
 
 } # END: check_args
 
