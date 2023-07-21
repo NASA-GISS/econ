@@ -45,7 +45,7 @@ econ (-r|--runid) RUNID [--template TEMPLATE] [-t0|-t1|-t2 YYYY-MM-DD] [(-er|--e
   -o|--overwrite:    Overwrite folder if it already exists
   -h|--help:         Print this help
   --examples:        Show some examples
-  -v[v[v]]:          Print debugging messages with increasing verobsity
+  -v[v[v]]:          Print debugging messages with increasing verbosity
 
   OPTIONS for runE:
   -cr|--cold-restart:    Passed to runE if set
@@ -67,9 +67,9 @@ echo
 #+begin_example
 Restart test: 5 days vs 2+3 days
 # run for 5 days from cold start
-../exec/econ -r foo --template /path/to/E6F40nopism -t0 1000-01-01 -t2 1000-01-05 -cold-restart -v
+../exec/econ -r foo --template /path/to/E6F40nopism -t0 1000-01-01 -t2 1000-01-05 --cold-restart -v
 # run for 2 (cold start) + 3 days (continue)
-../exec/econ -r bar --template /path/to/foo.R -t0 1000-01-01 -t2 1000-01-02 -cold-restart
+../exec/econ -r bar --template /path/to/foo.R -t0 1000-01-01 -t2 1000-01-02 --cold-restart
 ../exec/econ -r bar -t1 1000-01-05
 
 More complicated example...
