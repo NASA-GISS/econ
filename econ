@@ -216,7 +216,6 @@ function check_args() {
   [[ -z ${overwrite:-} && -d ${rundir:-} && -n ${cold_restart:-} ]] && \
     log_warn "RUNDIR exists but --cold-restart w/o --overwrite?"
   [[ -z ${overwrite:-} && -z ${rundir:-} && -z ${cold_restart:-} ]] && \
-<<<<<<< Updated upstream
     err_exit "New run but no --cold-restart"
      
   # Default for t0, t1, and t2
