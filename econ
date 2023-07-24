@@ -120,9 +120,6 @@ function check_env() {
   log_info "Checking env..."
   [[ $(basename $(pwd)) == "decks" ]] || err_exit "Not in modelE/decks folder"
   [[ $(hostname) == "discover"* ]] || log_warn "Not on discover"
-
-  log_info 
-
 } # END: check_env
 
 
