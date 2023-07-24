@@ -355,7 +355,6 @@ function post_build() {
     cp -R ${er}/data/landice/config ${rundir}/decks/${runid}/
   fi
   
-  echo ${STARTDIR}/${runid}
   if [[ ! -e ${STARTDIR}/${runid} ]]; then
     log_info "ln -s ${rundir}/decks/${runid} ${STARTDIR}/${runid}"
     ln -s ${rundir}/decks/${runid} ${STARTDIR}/${runid}
