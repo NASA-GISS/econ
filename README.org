@@ -18,6 +18,15 @@ wget https://github.com/NASA-GISS/econ/archive/refs/heads/main.zip -O econ.zip
 unzip -j -o econ.zip econ-main/econ econ-main/econ_includes.sh
 #+END_SRC
 
+** Installation with git access
+
+#+BEGIN_SRC bash
+cd your/code/directory
+git clone git@github.com:NASA-GISS/econ.git
+cd your/modelE/directory/exec/
+ln -s your/code/directory/econ/econ .
+ln -s your/code/directory/econ/econ_include.sh .
+#+END_SRC
 
 * Documentation
 

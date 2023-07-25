@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+STARTDIR=$(pwd)
+
 if [[ $( dirname "${BASH_SOURCE[0]}" ) == "." ]]; then
   SCRIPT_HOME=$(pwd); else SCRIPT_HOME=$( dirname "${BASH_SOURCE[0]}" );
 fi
@@ -180,15 +182,6 @@ function check_args() {
     log_info "TEMPLATE: ${template}"
   else log_info "No TEMPLATE"; fi
   
-  # Default for t0, t1, and t2
-  if [[ ${cold_restart:-} ]]; then
-    log_info "CR set: t0=${t0:=1000-01-01} t2=${t2:=1000-01-02}"
-    log_info "Requested queue runtime: ${t:=10:00}"
-  else
-    log_info "CR not set: t0=${t0:=1000-01-01} t1=${t1:=1000-01-02}"
-    log_info "Requested queue runtime: ${t:=60:00}"
-  fi
-  
   # check t0 t1 t2 formats and bounds
   # defined?    Valid?
   [[ ${t0:-} && ${t0} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || err_exit "t0 format invalid: ${t0}"
@@ -286,16 +279,11 @@ function build_setup() {
 
 
 function build_do() {
+  
   log_info "Building..."
   
   cd ${rundir}/decks
-
-  if [[ -z ${overwrite:-} && -z ${template:-} && -z ${recompile:-} ]]; then
-    log_info "No overwrite, template, or recompile flag set..."
-    log_warn "Not recompiling."
-    return 0
-  fi
-
+  
   if [[ ${template:-} ]]; then
     log_info "Copying ${template} to ${runid}.R"
     cp ${template} ${runid}.R
@@ -328,6 +316,18 @@ function build_do() {
     sed -i "/ISTART=2/s/MONTHE[^,]*/MONTHE=${t2:5:2}/" ${R_OR_I_FILE}
     sed -i "/ISTART=2/s/DATEE[^,]*/DATEE=${t2:8:2}/" ${R_OR_I_FILE}
   fi
+  
+  if [[ -z ${overwrite:-} && -z ${template:-} && -z ${recompile:-} ]]; then
+    log_info "No overwrite, template, or recompile flag set..."
+    log_warn "Not recompiling."
+    return 0
+  fi
+  
+  log_info "Loading the modules for compiling"
+  log_info "source ${rc}"
+  source ${rc} # source the MODELERC file
+  log_info "source ${LILIBSDIR}/../loads-x"
+  source ${LILIBSDIR}/../loads-x
 
   EXTRA_FFLAGS+=" -O0 -ggdb3 -fwrapv -fallow-argument-mismatch -fallow-invalid-boz"
   EXTRA_FFLAGS+=" -DLI_COUPLE_DAILY"
@@ -354,6 +354,12 @@ function post_build() {
     log_info "cp -R ${er}/data/landice/config ${rundir}/decks/${runid}/"
     cp -R ${er}/data/landice/config ${rundir}/decks/${runid}/
   fi
+  
+  if [[ ! -e ${STARTDIR}/${runid} ]]; then
+    log_info "ln -s ${rundir}/decks/${runid} ${STARTDIR}/${runid}"
+    ln -s ${rundir}/decks/${runid} ${STARTDIR}/${runid}
+  fi
+
 } #END: post__build
 
 
@@ -361,7 +367,7 @@ function runE() {
   log_info "Running E..."
   cd ${rundir}/decks
 
-  if [[ ${qsub_string:-} ]]; then qq=" -q ${qsub_string} "; else qq=""; fi
+  if [[ ${qsub_string:-} ]]; then qq=" -s ${qsub_string} "; else qq=""; fi
 
   ../exec/runE \
     ${runid} \
